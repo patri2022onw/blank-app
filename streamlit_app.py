@@ -1,332 +1,241 @@
-############ 1. IMPORTING LIBRARIES ############
-
-# Import streamlit, requests for API calls, and pandas and numpy for data manipulation
-
 import streamlit as st
-import requests
 import pandas as pd
-from streamlit_tags import st_tags  # to add labels on the fly!
+from datetime import datetime
+import json
+import os
+import re
+import time
+from anthropic import Anthropic
 
+# Initialize Anthropic client
+anthropic = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
-############ 2. SETTING UP THE PAGE LAYOUT AND TITLE ############
+# API Call with user prompt
+def check_grammar(text):
+    user_message = f"""You are a German language tutor. Check the text below for spelling, punctuation, and grammar. Output your response in JSON format. Do not include a preamble. Construct the JSON as a list of dictionaries with keys: 'Satz' (sentence from the original text), 'Satzteil' (part of the sentence containing the error), 'Fehler' (the type of the error), and 'Vorschlag' (suggestion for correction). For the error type use: 'Rechtschreibung', 'Zeichensetzung', 'Wortwahl', 'Wortstellung', 'Subjekt-Verb-Kongruenz', 'Grossschreibung', 'Kleinschreibung', 'Negation', 'Verbform', 'Substantivform', 'Adjektiv + Substantiv', 'Adverb', 'Konjunktion', 'Präposition + Phrase'. Go sentence by sentence. For each error, include a dictionary in the JSON. If there are no errors in a sentence, only include the sentence and provide no values for the other keys. If a sentence is not in German, only include the sentence and provide no values for the other keys. Pace yourself to always output a complete JSON. If there are not enough tokens to analyze all sentences, reduce the number of sentences to analyze, so that the result is in the form of a valid JSON. Text to check: {text}"""
 
-# `st.set_page_config` is used to display the default layout width, the title of the app, and the emoticon in the browser tab.
-
-st.set_page_config(
-    layout="centered", page_title="Grammatik-Profi", page_icon="✅"
-)
-
-############ CREATE THE LOGO AND HEADING ############
-
-# We create a set of columns to display the logo and the heading next to each other.
-
-
-c1, c2 = st.columns([0.32, 2])
-
-# The G-Checkmark-P logo will be displayed in the first column, on the left.
-
-with c1:
-
-    st.image(
-        "images/logo.png",
-        width=85,
+    response = anthropic.messages.create(
+        model="claude-3-5-sonnet-20240620",
+        max_tokens=3025,
+        messages=[{"role": "user", "content": user_message}]
     )
+    
+    return response.content[0].text
+
+# Functions for color-coding errors in entered text
+def underline_text(text, parts_and_errors):
+    color_map = {
+        "Rechtschreibung": "green",
+        "Zeichensetzung": "yellow",
+        "Wortwahl": "orange",
+	    "Wortstellung": "orange"
+        }
+    
+    # Sort parts_and_errors by part length (longest first) to handle overlapping underlines
+    parts_and_errors.sort(key=lambda x: len(x[0]), reverse=True)
+    
+    for part, error_types in parts_and_errors:
+        pattern = re.escape(part)
+        underline_styles = []
+        for i, error_type in enumerate(error_types):
+            color = color_map.get(error_type, "blue")
+            offset = 6 + i * 3  # Increase offset for each additional underline
+            underline_styles.append(f"text-decoration: underline; text-decoration-color: {color}; text-underline-offset: {offset}px;")
+        
+        style = " ".join(underline_styles)
+        replacement = f'<span style="{style}">{part}</span>'
+        text = re.sub(pattern, replacement, text)
+    
+    return text
+
+# changed "process_csv(file_path):" to "process_df(df_):
+def process_df(df_):
+    sentences = {}
+    index_list = df_.index.to_list()
+    for i in index_list:
+        sentence = df_.loc[i, "Satz"]
+        part = df_.loc[i, "Satzteil"]
+        error_type = df_.loc[i, "Fehler"]
+            
+        if sentence:
+            if sentence not in sentences:
+                sentences[sentence] = {}
+            if part and error_type:
+                if part not in sentences[sentence]:
+                    sentences[sentence][part] = set()
+                sentences[sentence][part].add(error_type)
+    
+    formatted_sentences = []
+    for sentence, parts in sentences.items():
+        parts_and_errors = [(part, list(error_types)) for part, error_types in parts.items()]
+        formatted_sentence = underline_text(sentence, parts_and_errors)
+        formatted_sentences.append(formatted_sentence)
+    
+    return " ".join(formatted_sentences)
 
 
-# The heading will be on the right.
+# Page configuration
+st.set_page_config(layout="centered", page_title="Grammar Pointer", page_icon="✅")
 
+# Logo and heading
+c1, c2 = st.columns([0.32, 2])
+with c1:
+    st.image("images/stylized-arrow-symbol.png", width=85)
 with c2:
-
     st.caption("")
-    st.title("Grammatik-Profi")
+    st.title("Grammar Pointer")
 
-
-# We need to set up session state via st.session_state so that app interactions don't reset the app.
-
-if not "valid_inputs_received" in st.session_state:
+# Initialize session state
+if "valid_inputs_received" not in st.session_state:
     st.session_state["valid_inputs_received"] = False
 
-
-############ SIDEBAR CONTENT ############
-
-st.sidebar.write("")
-
-# For elements to be displayed in the sidebar, we need to add the sidebar element in the widget.
-
-# We create a text input field for users to enter their API key.
-
-API_KEY = st.sidebar.text_input(
-    "Enter your Anthropic API key",
-    help="Once you created your Anthropic account, you can get your API token in your settings page: [Anthropic]",
+# Sidebar
+st.sidebar.image("images/Anthropic.png", width=200)
+st.sidebar.title("Grammar Pointer")
+api_key = st.sidebar.text_input(
+    "Enter your Password or Anthropic API key:", 
     type="password",
+    help="Once you created your Anthropic account, you can get your API access token."
 )
 
-# Adding the HuggingFace API inference URL.
-API_URL = "https://api-inference.huggingface.co/models/valhalla/distilbart-mnli-12-3"
-
-# Now, let's create a Python dictionary to store the API headers.
-headers = {"Authorization": f"Bearer {API_KEY}"}
-
+if api_key:
+    if api_key in st.secrets["my_app_passwords"]["st_gp_passwords"]:
+        api_key = st.secrets["Anthropic_API_KEY"]
+    os.environ["ANTHROPIC_API_KEY"] = api_key
+    anthropic = Anthropic(api_key=api_key)
+else:
+    st.sidebar.warning("Please enter your Anthropic API key to use the grammar pointer.")
 
 st.sidebar.markdown("---")
+st.sidebar.write("App created by pratic-orft using [Streamlit](https://streamlit.io/)🎈 and Anthropic Claude Sonnet 3.5.")
 
-
-# Let's add some info about the app to the sidebar.
-
-st.sidebar.write(
-    """
-
-App created by Ratpick_Orft using [Streamlit](https://streamlit.io/)🎈 and [Anthropic Claude](https://. )'s ###[Distilbart-mnli-12-3](https://huggingface.co/valhalla/distilbart-mnli-12-3) model.
-
-"""
-)
-
-
-############ TABBED NAVIGATION ############
-
-# First, we're going to create a tabbed navigation for the app via st.tabs()
-# tabInfo displays info about the app.
-# tabMain displays the main app.
-
+# Tabbed navigation
 MainTab, InfoTab = st.tabs(["Main", "Info"])
 
 with InfoTab:
-
     st.subheader("What is Streamlit?")
-    st.markdown(
-        "[Streamlit](https://streamlit.io) is a Python library that allows the creation of interactive, data-driven web applications in Python."
-    )
-
+    st.markdown("[Streamlit](https://streamlit.io) is a Python library that allows the creation of interactive, data-driven web applications in Python.")
+    
     st.subheader("Resources")
-    st.markdown(
-        """
+    st.markdown("""
     - [Streamlit Documentation](https://docs.streamlit.io/)
     - [Cheat sheet](https://docs.streamlit.io/library/cheatsheet)
     - [Book](https://www.amazon.com/dp/180056550X) (Getting Started with Streamlit for Data Science)
-    """
-    )
-
+    """)
+    
     st.subheader("Deploy")
-    st.markdown(
-        "You can quickly deploy Streamlit apps using [Streamlit Community Cloud](https://streamlit.io/cloud) in just a few clicks."
-    )
-
+    st.markdown("You can quickly deploy Streamlit apps using [Streamlit Community Cloud](https://streamlit.io/cloud) in just a few clicks.")
 
 with MainTab:
-
-    # Then, we create a intro text for the app, which we wrap in a st.markdown() widget.
-
-    st.write("")
-    st.markdown(
-        """
-
-    Diese App prüft Grammatik und Rechtschreibung!
-
-    """
-    )
-
-    st.write("")
-
-    # Now, we create a form via `st.form` to collect the user inputs.
-
-    # All widget values will be sent to Streamlit in batch.
-    # It makes the app faster!
-
+    st.markdown("This app gives pointers for grammar, spelling, and punctuation in foreign languages!")
+    
+    MAX_CHARACTERS = 1500
+    
     with st.form(key="my_form"):
-
-        ############ ST TAGS ############
-
-        # We initialize the st_tags component with default "labels"
-
-        # Here, we want to classify the text into one of the following user intents:
-        # Transactional
-        # Informational
-        # Navigational
-
-        labels_from_st_tags = st_tags(
-            value=["Grammatik", "Rechtschreibung", "Zeichensetzung", "Wortwahl"],
-            maxtags=4,
-            suggestions=["Grammatik", "Rechtschreibung", "Zeichensetzung", "Wortwahl"],
-            label="",
-        )
-
-        # The block of code below is to display some text samples to classify.
-        # This can of course be replaced with your own text samples.
-
-        # MAX_CHARACTERS is a variable that controls the number of characters that can be pasted:
-        # The default in this app is 2500 characters. This can be changed to any number you like.
-
-        MAX_CHARACTERS = 2500
-
-        new_line = "\n"
-
-        # The block of code below displays a text area
-        # So users can paste their phrases to classify
-
-        text = st.text_area(
-            # Instructions
+        in_text = st.text_area(
             "Deutschen Text zur Prüfung eingeben",
-            # The height
             height=200,
-            # The tooltip displayed when the user hovers over the text area.
-            help="At least two keyphrases for the classifier to work, one per line, "
-            + str(MAX_CHARACTERS)
-            + " max characters in 'unlocked mode'. You can tweak 'MAX_CHARACTERS' in the code to change this",
+            help=f"Bitte nur deutschen Text mit max. {MAX_CHARACTERS} eingeben!",
             key="1",
         )
-
-        # The block of code below:
-
-        # 1. Converts the data st.text_area into a Python list.
-        # 2. It also removes duplicates and empty lines.
-        # 3. Raises an error if the user has entered more lines than in MAX_CHARACTERS.
-
-        text = text.split("\n")  # Converts the pasted text to a Python list
-        linesList = []  # Creates an empty list
-        for x in text:
-            linesList.append(x)  # Adds each line to the list
-        linesList = list(dict.fromkeys(linesList))  # Removes dupes
-        linesList = list(filter(None, linesList))  # Removes empty lines
-
-        if len(text) > MAX_CHARACTERS:
-            st.info(
-                f"❄️ Nur die ersten "
-                + str(MAX_KEY_PHRASES)
-                + " Zeichen werden geprüft. Fork the repo and tweak 'MAX_CHARACTERS' in the code to increase that limit."
-            )
-
-            # linesList = linesList[:MAX_KEY_PHRASES] # NEED DIFFERENT CODE SOLUTION HERE
-
+        
+        if len(in_text) > MAX_CHARACTERS:
+            st.info(f"Nur die ersten {MAX_CHARACTERS} Zeichen werden geprüft.")
+        
         submit_button = st.form_submit_button(label="Prüfen")
-
-    ############ CONDITIONAL STATEMENTS ############
-
-    # Now, let us add conditional statements to check if users have entered valid inputs.
-    # E.g. If the user has pressed the 'submit button without text, without labels, and with only one label etc.
-    # The app will display a warning message.
-
+    
     if not submit_button and not st.session_state.valid_inputs_received:
         st.stop()
-
-    elif submit_button and not text:
+    elif submit_button and not in_text:
         st.warning("❄️ Kein Text zu prüfen!")
         st.session_state.valid_inputs_received = False
         st.stop()
-
-    elif submit_button and not labels_from_st_tags:
-        st.warning("❄️ Bitte Kategorien für die Prüfung auswählen! ")
-        st.session_state.valid_inputs_received = False
-        st.stop()
-
     elif submit_button or st.session_state.valid_inputs_received:
-
         if submit_button:
-
-            # The block of code below if for our session state.
-            # This is used to store the user's inputs so that they can be used later in the app.
-
             st.session_state.valid_inputs_received = True
-
-        ############ MAKING THE API CALL ############
-
-        # First, we create a Python function to construct the API call.
-
-        def query(payload):
-            response = requests.post(API_URL, headers=headers, json=payload)
-            return response.json()
-
-        # The function will send an HTTP POST request to the API endpoint.
-        # This function has one argument: the payload
-        # The payload is the data we want to send to HugggingFace when we make an API request
-
-        # We create a list to store the outputs of the API call
-
-        list_for_api_output = []
-
-        # We create a 'for loop' that iterates through each keyphrase
-        # An API call will be made every time, for each keyphrase
-
-        # The payload is composed of:
-        #   1. the keyphrase
-        #   2. the labels
-        #   3. the 'wait_for_model' parameter set to "True", to avoid timeouts!
-
-        for row in linesList:
-            api_json_output = query(
-                {
-                    "inputs": row,
-                    "parameters": {"candidate_labels": labels_from_st_tags},
-                    "options": {"wait_for_model": True},
-                }
-            )
-
-            # Let's have a look at the output of the API call
-            # st.write(api_json_output)
-
-            # All the results are appended to the empty list we created earlier
-            list_for_api_output.append(api_json_output)
-
-            # then we'll convert the list to a dataframe
-            df = pd.DataFrame.from_dict(list_for_api_output)
+        
+        Claude_json_output = check_grammar(in_text)
+        st.write(Claude_json_output)
+        
+        try:
+            test_json = json.loads(Claude_json_output)
+        except ValueError:
+            st.write("Text konnte nicht geprüft werden. Häufige Fehler: Sonderzeichen, Anführungszeichen etc. Diese Entfernen und Prüfung wiederholen.")
+            st.stop()
 
         st.success("✅ Fertig!")
+        
+        # Create and Process the Dataframe with the Grammar Pointers
+        df = pd.read_json(Claude_json_output, orient="records")
+        df.dropna(how="all", inplace=True)
+        df.fillna(value="", inplace=True)
 
+
+        colored_sentences = process_df(df)
+
+
+        # Display the results of color coding the input text
+        st.caption("")
+        st.markdown("### Geprüfter Text mit Anstreichungen!")
+        st.markdown("Farben: 'blau' für Grammatik, 'grün' für Rechtschreibung, 'orange' für Wortstellung und Wortwahl, 'gelb' für Zeichensetzung")
+        st.caption("")
+
+        st.markdown(colored_sentences, unsafe_allow_html=True)
+
+        
         st.caption("")
         st.markdown("### Bitte die Ergebnisse auswerten!")
         st.caption("")
+        
+        # Filter Grammar Pointers before displaying 
+        df_filtered = df.filter(["Satz", "Satzteil", "Fehler"], axis=1)
+        df_filtered.reset_index(drop=True, inplace=True)
+        df_filtered.index = df_filtered.index + 1
+        df.reset_index(drop=True, inplace=True)
+        df.index = df.index + 1
 
-        # st.write(df)
+        st.write(df_filtered)
+        
+    # Download button
+    @st.cache_data
+    def convert_df(df):
+        return df.to_csv().encode("utf-8")
+        
+    csv = convert_df(df)
+    dt_now = datetime.now()
+    now = dt_now.strftime("%-d-%-m-%Y")
 
-        ############ DATA WRANGLING ON THE RESULTS ############
-        # Various data wrangling to get the data in the right format!
-
-        # List comprehension to convert the score from decimals to percentages
-        f = [[f"{x:.2%}" for x in row] for row in df["scores"]]
-
-        # Join the classification scores to the dataframe
-        df["classification scores"] = f
-
-        # Rename the column 'sequence' to 'keyphrase'
-        df.rename(columns={"sequence": "keyphrase"}, inplace=True)
-
-        # The API returns a list of all labels sorted by score. We only want the top label.
-
-        # For that, we need to select the first element in the 'labels' and 'classification scores' lists
-        df["label"] = df["labels"].str[0]
-        df["accuracy"] = df["classification scores"].str[0]
-
-        # Drop the columns we don't need
-        df.drop(["scores", "labels", "classification scores"], inplace=True, axis=1)
-
-        # st.write(df)
-
-        # We need to change the index. Index starts at 0, so we make it start at 1
-        df.index = np.arange(1, len(df) + 1)
-
-        # Display the dataframe
-        st.write(df)
-
-        cs, c1 = st.columns([2, 2])
-
+    # Wrap the download button in a Streamlit fragment: Streamlit labels this a temporary workaround
+    @st.experimental_fragment
+    def show_download_button():
+        st.download_button(
+        label="Ergebnisse herunterladen (CSV-Format)",
+        data=csv,
+        file_name=f"Grammar-Pointers-{now}.csv",
+        mime="text/csv",
+        )
+    
+    show_download_button()
+    with st.spinner("3 Sekunden Pause"):
+        time.sleep(3)    
 
 
-
-        # The code below is for the download button
-        # Cache the conversion to prevent computation on every rerun
-
-        with cs:
-
-            @st.experimental_memo
-            def convert_df(df):
-                return df.to_csv().encode("utf-8")
-
-            csv = convert_df(df)
-
-            st.caption("")
-
-            st.download_button(
-                label="Download results",
-                data=csv,
-                file_name="classification_results.csv",
-                mime="text/csv",
-            )
+# Custom CSS to improve the appearance
+st.markdown("""
+    <style>
+    .stTextInput > div > div > input {
+        background-color: #f0f2f6;
+    }
+    .stTextArea > div > div > textarea {
+        background-color: #f0f2f6;
+    }
+    .stSelectbox > div > div > select {
+        background-color: #f0f2f6;
+    }
+    .stButton > button {
+        background-color: #4CAF50;
+        color: white;
+        font-weight: bold;
+    }
+    </style>
+    """, unsafe_allow_html=True)
