@@ -156,7 +156,7 @@ with MainTab:
             st.session_state.valid_inputs_received = True
         
         Claude_json_output = check_grammar(in_text)
-        st.write(Claude_json_output)
+        # st.write(Claude_json_output)
         
         try:
             test_json = json.loads(Claude_json_output)
