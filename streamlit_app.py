@@ -101,7 +101,7 @@ api_key = st.sidebar.text_input(
 
 if api_key:
     if api_key in st.secrets["my_app_passwords"]["st_gp_passwords"]:
-        api_key = st.secrets["Anthropic_API_KEY"]
+        api_key = st.secrets["ANTHROPIC_API_KEY"]
     os.environ["ANTHROPIC_API_KEY"] = api_key
     anthropic = Anthropic(api_key=api_key)
 else:
