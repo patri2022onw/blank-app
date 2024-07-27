@@ -12,8 +12,8 @@ anthropic = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
 # API Call with user prompt
 def check_grammar(text):
-    Claude_prompt = st.secrets["LLM_prompts"]["Claude_gp_prompt"]
-    user_message = f"""{Claude_prompt} Text to check: {text}"""
+    # Claude_prompt = st.secrets["LLM_prompts"]["Claude_gp_prompt"]
+    user_message = f"""You are a German language tutor. Check the text below for spelling, punctuation, and grammar. Output your response in JSON format. Do not include a preamble. Construct the JSON as a list of dictionaries with keys: 'Satz' (sentence from the original text), 'Satzteil' (part of the sentence containing the error), 'Fehler' (the type of the error), and 'Vorschlag' (suggestion for correction). For the error type use: 'Rechtschreibung', 'Zeichensetzung', 'Wortwahl', 'Wortstellung', 'Subjekt-Verb-Kongruenz', 'Grossschreibung', 'Kleinschreibung', 'Negation', 'Verbform', 'Substantivform', 'Adjektiv + Substantiv', 'Adverb', 'Konjunktion', 'Präposition + Phrase'. Go sentence by sentence. For each error, include a dictionary in the JSON. If there are no errors in a sentence, only include the sentence and provide no values for the other keys. If a sentence is not in German, only include the sentence and provide no values for the other keys. Pace yourself to always output a complete JSON. If there are not enough tokens to analyze all sentences, reduce the number of sentences to analyze, so that the result is in the form of a valid JSON. Text to check: {text}""" 
 
     response = anthropic.messages.create(
         model="claude-3-5-sonnet-20240620",
