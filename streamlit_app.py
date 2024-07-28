@@ -93,15 +93,17 @@ if "valid_inputs_received" not in st.session_state:
 # Sidebar
 st.sidebar.image("images/Anthropic.png", width=200)
 st.sidebar.title("Grammar Pointer")
-api_key = st.sidebar.text_input(
+gp_credential = st.sidebar.text_input(
     "Enter your Password or Anthropic API key:", 
     type="password",
     help="Once you created your Anthropic account, you can get your API access token."
 )
 
-if api_key:
-    if api_key in st.secrets["my_app_passwords"]["st_gp_passwords"]:
-        api_key = st.secrets["ANTHROPIC_API_KEY"]
+if gp_credential:
+    if gp_credential in st.secrets.get("gp_passwords", []):
+        api_key = st.secrets("anthropic_api_key")
+    else:
+        api_key = gp_credential
     os.environ["ANTHROPIC_API_KEY"] = api_key
     anthropic = Anthropic(api_key=api_key)
 else:
