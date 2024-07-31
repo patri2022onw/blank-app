@@ -198,7 +198,7 @@ with MainTab:
         # Display the results of color coding the input text
         st.caption("")
         st.markdown("### Geprüfter Text mit Anstreichungen!")
-        st.markdown(body="<span style='text-decoration: underline; text-decoration-color:blue;'>Grammatik</span> <span style='text-decoration: underline; text-decoration-color:green;'>Rechtschreibung</span> <span style='text-decoration: underline; text-decoration-color:orange;'>Wortwahl und Wortstellung</span> <span style='text-decoration: underline; text-decoration-color:yellow;'>Zeichensetzung</span>", unsafe_allow_html=True)
+        st.markdown(body="<span style='text-decoration: underline; text-decoration-color:blue;'>Grammatik</span> - <span style='text-decoration: underline; text-decoration-color:green;'>Rechtschreibung</span> - <span style='text-decoration: underline; text-decoration-color:orange;'>Wortwahl und Wortstellung</span> - <span style='text-decoration: underline; text-decoration-color:yellow;'>Zeichensetzung</span>", unsafe_allow_html=True)
         st.caption("")
 
         st.markdown(colored_sentences, unsafe_allow_html=True)
