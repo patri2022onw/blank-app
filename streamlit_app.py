@@ -10,10 +10,26 @@ from anthropic import Anthropic
 # Initialize Anthropic client
 anthropic = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
+# Validating API KEY
+def is_valid_api_key(api_key):
+    # Attempt to make a simple API call
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        # Attempt to make a simple API call
+        client.completions.create(
+            model="claude-2.1",
+            max_tokens_to_sample=1,
+            prompt="This is a test."
+        )
+        return True
+    except Exception:
+        return False
+
+        
 # API Call with user prompt
 def check_grammar(text):
-    # Claude_prompt = st.secrets["LLM_prompts"]["Claude_gp_prompt"]
-    user_message = f"""You are a German language tutor. Check the text below for spelling, punctuation, and grammar. Output your response in JSON format. Do not include a preamble. Construct the JSON as a list of dictionaries with keys: 'Satz' (sentence from the original text), 'Satzteil' (part of the sentence containing the error), 'Fehler' (the type of the error), and 'Vorschlag' (suggestion for correction). For the error type use: 'Rechtschreibung', 'Zeichensetzung', 'Wortwahl', 'Wortstellung', 'Subjekt-Verb-Kongruenz', 'Grossschreibung', 'Kleinschreibung', 'Negation', 'Verbform', 'Substantivform', 'Adjektiv + Substantiv', 'Adverb', 'Konjunktion', 'Präposition + Phrase'. Go sentence by sentence. For each error, include a dictionary in the JSON. If there are no errors in a sentence, only include the sentence and provide no values for the other keys. If a sentence is not in German, only include the sentence and provide no values for the other keys. Pace yourself to always output a complete JSON. If there are not enough tokens to analyze all sentences, reduce the number of sentences to analyze, so that the result is in the form of a valid JSON. Text to check: {text}""" 
+    claude_prompt = st.secrets.get("claude_gp_prompt")
+    user_message = f"""{claude_prompt} Text to check: {text}""" 
 
     response = anthropic.messages.create(
         model="claude-3-5-sonnet-20240620",
@@ -81,7 +97,7 @@ st.set_page_config(layout="centered", page_title="Grammar Pointer", page_icon="�
 # Logo and heading
 c1, c2 = st.columns([0.32, 2])
 with c1:
-    st.image("images/stylized-arrow-symbol.png", width=85)
+    st.image("images/stylized-arrow-symbol-short.png", width=85)
 with c2:
     st.caption("")
     st.title("Grammar Pointer")
@@ -100,14 +116,16 @@ gp_credential = st.sidebar.text_input(
 )
 
 if gp_credential:
+    # check if password is valid
     if gp_credential in st.secrets.get("gp_passwords", []):
-        api_key = st.secrets("anthropic_api_key")
-    else:
+        api_key = st.secrets.get("anthropic_api_key")
+    elif is_valid_api_key(gp_credential):
         api_key = gp_credential
     os.environ["ANTHROPIC_API_KEY"] = api_key
     anthropic = Anthropic(api_key=api_key)
 else:
-    st.sidebar.warning("Please enter your Anthropic API key to use the grammar pointer.")
+    st.sidebar.warning("Please enter your password or Anthropic API key to use Grammar Pointer.")
+
 
 st.sidebar.markdown("---")
 st.sidebar.write("App created by pratic-orft using [Streamlit](https://streamlit.io/)🎈 and Anthropic Claude Sonnet 3.5.")
@@ -180,7 +198,7 @@ with MainTab:
         # Display the results of color coding the input text
         st.caption("")
         st.markdown("### Geprüfter Text mit Anstreichungen!")
-        st.markdown("Farben: 'blau' für Grammatik, 'grün' für Rechtschreibung, 'orange' für Wortstellung und Wortwahl, 'gelb' für Zeichensetzung")
+        st.markdown(body="<span style='text-decoration: underline; text-decoration-color:blue;'>Grammatik</span> <span style='text-decoration: underline; text-decoration-color:green;'>Rechtschreibung</span> <span style='text-decoration: underline; text-decoration-color:orange;'>Wortwahl und Wortstellung</span> <span style='text-decoration: underline; text-decoration-color:yellow;'>Zeichensetzung</span>", unsafe_allow_html=True)
         st.caption("")
 
         st.markdown(colored_sentences, unsafe_allow_html=True)
