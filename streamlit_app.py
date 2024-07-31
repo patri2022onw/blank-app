@@ -119,7 +119,7 @@ if gp_credential:
     # check if password is valid
     if gp_credential in st.secrets.get("gp_passwords", []):
         api_key = st.secrets.get("anthropic_api_key")
-    elif is_valid_api_key(gp_credential):
+    else:
         api_key = gp_credential
     os.environ["ANTHROPIC_API_KEY"] = api_key
     anthropic = Anthropic(api_key=api_key)
